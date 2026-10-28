@@ -1,0 +1,43 @@
+name: Sync from canonical monorepo
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-from-monorepo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this mirror
+        uses: actions/checkout@v4
+        with:
+          path: mirror
+
+      - name: Check out the canonical monorepo
+        run: git clone --depth 1 --branch main https://github.com/TidelightOrg/tidelight.git canonical
+
+      - name: Synchronize package files
+        run: |
+          rsync -a --delete \
+            --exclude='/.git/' \
+            --exclude='/.github/' \
+            --exclude='/README.md' \
+            canonical/packages/cli/ mirror/
+
+      - name: Commit and push updates
+        run: |
+          git -C mirror config user.name "github-actions[bot]"
+          git -C mirror config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C mirror add -A
+          if ! git -C mirror diff --cached --quiet; then
+            git -C mirror commit -m "Sync cli from Tidelight monorepo"
+            git -C mirror push origin HEAD:main
+          fi
